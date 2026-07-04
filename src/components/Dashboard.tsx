@@ -36,7 +36,10 @@ import {
   FileCheck,
   UserPlus,
   LayoutGrid,
-  Flame
+  Flame,
+  Scale,
+  ShieldAlert,
+  Loader2
 } from "lucide-react";
 import { Employee, JobRequisition, LeaveRequest, AttendanceRecord, PayrollRun } from "../types";
 
@@ -79,6 +82,74 @@ export default function Dashboard({
   const [chartTimeframe, setChartTimeframe] = useState<"3M" | "6M" | "YTD">("6M");
   const [urgencyFilter, setUrgencyFilter] = useState<"All" | "Critical" | "High" | "Medium">("All");
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+  // CEO Strategic Workforce Projections state
+  const [planningMode, setPlanningMode] = useState<"freeze" | "baseline" | "aggressive" | "downsize" | "custom">("baseline");
+  const [customGrowth, setCustomGrowth] = useState<number>(5); // -15% to +25%
+  const [customSalaryInflation, setCustomSalaryInflation] = useState<number>(2); // -10% to +15%
+
+  // Bangladesh Labour Act (BLA) Real-Time Compliance Alerts
+  const [complianceAlerts, setComplianceAlerts] = useState([
+    {
+      id: "bla-001",
+      section: "Section 100 / 108",
+      title: "Overtime Threshold Violation",
+      description: "Engineering Department has 3 active FTEs exceeding the maximum legal cap of 60 working hours this week (including overtime limits).",
+      riskLevel: "Critical" as const,
+      status: "Active" as const,
+      quickFixText: "Rebalance Shift Schedule"
+    },
+    {
+      id: "bla-002",
+      section: "Section 46 / 47",
+      title: "Maternity Ledger Discrepancy",
+      description: "Pending statutory maternal leave payout validation for Employee #EMP-042 (Marketing) within the required timeline.",
+      riskLevel: "Critical" as const,
+      status: "Active" as const,
+      quickFixText: "Authorize Maternal Payout"
+    },
+    {
+      id: "bla-003",
+      section: "Section 103",
+      title: "Consecutive Shifts No Holiday",
+      description: "Operations Department scheduled 4 logistics personnel for 9 consecutive workdays without the mandatory 24-hour weekly holiday.",
+      riskLevel: "High" as const,
+      status: "Active" as const,
+      quickFixText: "Enforce Rest-Day Schedule"
+    },
+    {
+      id: "bla-004",
+      section: "Section 121",
+      title: "Delayed Wage Disbursement",
+      description: "2 temporary contractual staff wage entries are pending past the 7th-day statutory deadline from the wage period expiration.",
+      riskLevel: "High" as const,
+      status: "Active" as const,
+      quickFixText: "Run Off-cycle Payroll"
+    },
+    {
+      id: "bla-005",
+      section: "Section 115",
+      title: "Sick Leave Documentation Gap",
+      description: "Mismatched record: 2 sick leaves approved in Finance Department without standard registered medical practitioner certifications.",
+      riskLevel: "Medium" as const,
+      status: "Active" as const,
+      quickFixText: "Request Medical Proof"
+    }
+  ]);
+
+  const handleResolveAlert = (id: string) => {
+    // Set status to "Resolving" to show a spinner
+    setComplianceAlerts(prev => prev.map(alert => 
+      alert.id === id ? { ...alert, status: "Resolving" as const } : alert
+    ));
+
+    // After 1.2 seconds, mark as "Resolved"
+    setTimeout(() => {
+      setComplianceAlerts(prev => prev.map(alert => 
+        alert.id === id ? { ...alert, status: "Resolved" as const } : alert
+      ));
+    }, 1200);
+  };
 
   // Keep a real-time clock running
   useEffect(() => {
@@ -287,6 +358,77 @@ export default function Dashboard({
     { value: 89 },
     { value: satisfactionScore }
   ], [satisfactionScore]);
+
+  // CEO Strategic Workforce Projections simulator calculation
+  const simulatedQuarters = useMemo(() => {
+    const qData = [];
+    let currentHeadcount = totalCount || 30;
+    let currentMonthlySalarySum = payrollSummaryBDT || 2500000;
+    
+    // Base rates depending on simulation mode
+    let quarterlyHeadcountGrowth = 0.04; // default baseline
+    let quarterlySalaryInflation = 0.02; // default baseline
+    let organicRevenueGrowth = 0.05;     // default baseline
+    
+    if (planningMode === "freeze") {
+      quarterlyHeadcountGrowth = 0;
+      quarterlySalaryInflation = 0.01;
+      organicRevenueGrowth = 0.035;
+    } else if (planningMode === "aggressive") {
+      quarterlyHeadcountGrowth = 0.12;
+      quarterlySalaryInflation = 0.04;
+      organicRevenueGrowth = 0.07;
+    } else if (planningMode === "downsize") {
+      quarterlyHeadcountGrowth = -0.05;
+      quarterlySalaryInflation = 0.00;
+      organicRevenueGrowth = -0.015;
+    } else if (planningMode === "custom") {
+      quarterlyHeadcountGrowth = customGrowth / 100;
+      quarterlySalaryInflation = customSalaryInflation / 100;
+      organicRevenueGrowth = 0.04 + (quarterlyHeadcountGrowth * 0.35);
+    }
+
+    // Baseline quarterly revenue per employee is around 750,000 BDT (250K per month)
+    let currentRevenuePerEmployee = 750000;
+    let currentTotalRevenue = currentHeadcount * currentRevenuePerEmployee;
+
+    for (let q = 1; q <= 4; q++) {
+      const qName = `Q${q} 25/26`;
+      
+      const prevHeadcount = currentHeadcount;
+      currentHeadcount = Math.max(5, Math.round(currentHeadcount * (1 + quarterlyHeadcountGrowth)));
+      
+      // Inflate salaries
+      currentMonthlySalarySum = currentMonthlySalarySum * (1 + quarterlySalaryInflation);
+      const averageMonthlySalary = prevHeadcount > 0 ? (currentMonthlySalarySum / prevHeadcount) : 75000;
+      
+      // Estimated quarterly cost including 1.25x employer overhead (taxes, space, benefits, insurance)
+      const estimatedQuarterlyCost = (averageMonthlySalary * 3 * 1.25) * currentHeadcount;
+      
+      // Calculate revenue growth
+      let qRevenueGrowth = organicRevenueGrowth;
+      // In aggressive, productivity lags in the first two quarters but pays off in Q3/Q4
+      if (planningMode === "aggressive") {
+        qRevenueGrowth = q <= 2 ? 0.04 : 0.15;
+      } else if (planningMode === "downsize") {
+        // Under downsizing, productivity first spikes slightly due to focus, then stabilizes
+        qRevenueGrowth = q <= 1 ? 0.01 : -0.02;
+      }
+      
+      currentTotalRevenue = currentTotalRevenue * (1 + qRevenueGrowth);
+      const revenuePerEmployee = currentHeadcount > 0 ? Math.round(currentTotalRevenue / currentHeadcount) : 0;
+      
+      qData.push({
+        name: qName,
+        headcount: currentHeadcount,
+        workforceCost: Number((estimatedQuarterlyCost / 1000000).toFixed(2)), // in Millions BDT
+        revenuePerEmployee: Number((revenuePerEmployee / 1000).toFixed(1)), // in Thousands BDT
+        totalRevenue: Number((currentTotalRevenue / 1000000).toFixed(2)) // in Millions BDT
+      });
+    }
+    
+    return qData;
+  }, [totalCount, payrollSummaryBDT, planningMode, customGrowth, customSalaryInflation]);
 
   // Dynamic organization health matrix calculations for departments
   const orgHealthData = useMemo(() => {
@@ -1007,8 +1149,270 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Row 5: Department Headcount Distribution Donut Chart (4-columns) */}
-        <div className="col-span-12 md:col-span-5 lg:col-span-4 bento-card p-6 flex flex-col justify-between bg-white">
+        {/* Row 4.7: CEO Workforce Planning Simulator (12-columns - BRAND NEW BENTO CARD) */}
+        <div className="col-span-12 bento-card p-6 bg-white flex flex-col justify-between">
+          <div>
+            {/* Header */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Coins className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight flex items-center gap-1.5">
+                    Strategic Workforce Planning Simulator
+                  </h3>
+                  <p className="text-xs text-slate-400">Evaluate impact of hiring freezes or business expansions on corporate efficiency models.</p>
+                </div>
+              </div>
+              
+              {/* Target User Segment Badge */}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-slate-50 text-slate-500 border border-slate-200">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                CEO Executive Suite
+              </span>
+            </div>
+
+            {/* Main Interactive Workspace Grid */}
+            <div className="grid grid-cols-12 gap-6">
+              
+              {/* Left Column: Interactive Controls Panel (4-cols) */}
+              <div className="col-span-12 lg:col-span-4 bg-slate-50/70 border border-slate-100 p-5 rounded-2xl flex flex-col justify-between gap-5">
+                <div>
+                  <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest block mb-3">Simulation Scenarios</span>
+                  
+                  {/* Segmented Controls */}
+                  <div className="space-y-2">
+                    {[
+                      { id: "baseline", name: "Moderate Expansion", desc: "Default operational growth model (+4%/qtr)", icon: TrendingUp },
+                      { id: "freeze", name: "Hiring Freeze", desc: "Freeze all new headcounts, optimize active pods", icon: Flame },
+                      { id: "aggressive", name: "Aggressive Expansion", desc: "High velocity scale-up across verticals (+12%/qtr)", icon: Sparkles },
+                      { id: "downsize", name: "Strategic Downsizing", desc: "Rationalize active FTE footprint (-5%/qtr)", icon: TrendingDown },
+                      { id: "custom", name: "Custom Sandbox Mode", desc: "Fully adjust hiring rate and compensation ratios", icon: Activity }
+                    ].map((mode) => {
+                      const ModeIcon = mode.icon;
+                      const isSelected = planningMode === mode.id;
+                      return (
+                        <button
+                          key={mode.id}
+                          onClick={() => setPlanningMode(mode.id as any)}
+                          className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
+                            isSelected 
+                              ? "bg-white border-emerald-500 shadow-sm shadow-emerald-500/5 text-slate-800" 
+                              : "bg-transparent border-slate-200/60 text-slate-600 hover:bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                            isSelected ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-slate-100 border-slate-200/50 text-slate-500"
+                          }`}>
+                            <ModeIcon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold">{mode.name}</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5 truncate leading-none">{mode.desc}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Parameters Block */}
+                <div className={`border-t border-slate-200/60 pt-4 mt-2 transition-all duration-300 ${
+                  planningMode === "custom" ? "opacity-100 scale-100" : "opacity-40 scale-[0.98] pointer-events-none"
+                }`}>
+                  <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest block mb-3">Custom Sandbox Controls</span>
+                  
+                  <div className="space-y-4">
+                    {/* Hiring Rate Slider */}
+                    <div>
+                      <div className="flex justify-between items-center text-[11px] font-mono font-bold text-slate-600 mb-1.5">
+                        <span>Headcount Growth Rate:</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${customGrowth >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                          {customGrowth >= 0 ? "+" : ""}{customGrowth}% / quarter
+                        </span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="-15" 
+                        max="25" 
+                        value={customGrowth}
+                        onChange={(e) => setCustomGrowth(parseInt(e.target.value))}
+                        disabled={planningMode !== "custom"}
+                        className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-200 rounded-lg appearance-none"
+                      />
+                    </div>
+
+                    {/* Salary Inflation Slider */}
+                    <div>
+                      <div className="flex justify-between items-center text-[11px] font-mono font-bold text-slate-600 mb-1.5">
+                        <span>Salary Adjustments:</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${customSalaryInflation >= 0 ? "bg-indigo-50 text-indigo-700" : "bg-amber-50 text-amber-700"}`}>
+                          {customSalaryInflation >= 0 ? "+" : ""}{customSalaryInflation}% / quarter
+                        </span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="-10" 
+                        max="15" 
+                        value={customSalaryInflation}
+                        onChange={(e) => setCustomSalaryInflation(parseInt(e.target.value))}
+                        disabled={planningMode !== "custom"}
+                        className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-200 rounded-lg appearance-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Outcomes, Projections & Dual-Axis Visualization (8-cols) */}
+              <div className="col-span-12 lg:col-span-8 flex flex-col justify-between gap-6">
+                
+                {/* 4th Quarter Output Highlights Metrics Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Projected Headcount */}
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/40">
+                    <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">Year-End Headcount</span>
+                    <div className="flex items-baseline gap-2 mt-1.5">
+                      <span className="text-2xl font-black font-sans text-slate-800 tracking-tight">
+                        {simulatedQuarters[3]?.headcount}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-slate-400">FTEs</span>
+                    </div>
+                    <div className="text-[10px] font-mono mt-1 text-slate-500">
+                      Delta: <span className={`font-bold ${
+                        (simulatedQuarters[3]?.headcount - totalCount) >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }`}>
+                        {(simulatedQuarters[3]?.headcount - totalCount) >= 0 ? "+" : ""}
+                        {simulatedQuarters[3]?.headcount - totalCount} ({Math.round(((simulatedQuarters[3]?.headcount - totalCount) / (totalCount || 1)) * 100)}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Total Workforce Cost */}
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/40">
+                    <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">Q4 Workforce Cost</span>
+                    <div className="flex items-baseline gap-1 mt-1.5">
+                      <span className="text-[10px] font-bold text-slate-400">BDT</span>
+                      <span className="text-2xl font-black font-sans text-slate-800 tracking-tight">
+                        ৳{simulatedQuarters[3]?.workforceCost}M
+                      </span>
+                    </div>
+                    <div className="text-[10px] font-mono mt-1 text-slate-500">
+                      Proj. Annual: <span className="font-bold text-slate-700">
+                        ৳{(simulatedQuarters.reduce((sum, q) => sum + q.workforceCost, 0)).toFixed(1)}M BDT
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Revenue Per Employee */}
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/40">
+                    <span className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest">Q4 Revenue / FTE</span>
+                    <div className="flex items-baseline gap-1 mt-1.5">
+                      <span className="text-[10px] font-bold text-slate-400">BDT</span>
+                      <span className="text-2xl font-black font-sans text-slate-800 tracking-tight">
+                        ৳{simulatedQuarters[3]?.revenuePerEmployee}K
+                      </span>
+                    </div>
+                    <div className="text-[10px] font-mono mt-1 text-slate-500">
+                      Efficiency: <span className={`font-bold ${
+                        (simulatedQuarters[3]?.revenuePerEmployee - 750) >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }`}>
+                        {(simulatedQuarters[3]?.revenuePerEmployee - 750) >= 0 ? "↑ " : "↓ "}
+                        {Math.round(((simulatedQuarters[3]?.revenuePerEmployee - 750) / 750) * 100)}% vs Base
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Projections Area / Line Chart */}
+                <div className="border border-slate-100 rounded-2xl p-4 bg-slate-50/20">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-widest">Quarterly Trend Projections</span>
+                    <div className="flex gap-4 text-[10px] font-mono font-bold">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded bg-emerald-500 inline-block"></span>
+                        <span className="text-emerald-700">Quarterly Cost (M BDT)</span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded bg-indigo-500 inline-block"></span>
+                        <span className="text-indigo-700">Revenue/Employee (K BDT)</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="h-44 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={simulatedQuarters} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="simCostGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="simRevGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15}/>
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                        <YAxis yAxisId="left" stroke="#10b981" fontSize={10} tickLine={false} axisLine={false} />
+                        <YAxis yAxisId="right" orientation="right" stroke="#6366f1" fontSize={10} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1.5px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
+                          labelStyle={{ fontWeight: 'bold', color: '#1e293b', fontSize: '11px' }}
+                          itemStyle={{ fontSize: '11px', padding: '1px 0' }}
+                        />
+                        <Area yAxisId="left" type="monotone" dataKey="workforceCost" name="Workforce Cost (M BDT)" stroke="#10b981" fillOpacity={1} fill="url(#simCostGrad)" strokeWidth={2} />
+                        <Area yAxisId="right" type="monotone" dataKey="revenuePerEmployee" name="Rev Per FTE (K BDT)" stroke="#6366f1" fillOpacity={1} fill="url(#simRevGrad)" strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabular Output */}
+                <div className="overflow-x-auto border border-slate-100 rounded-xl bg-white">
+                  <table className="w-full text-left border-collapse text-[11px] font-sans">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-mono text-slate-500 uppercase font-bold">
+                        <th className="py-2.5 px-4">Quarter</th>
+                        <th className="py-2.5 px-4 text-center">Simulated FTEs</th>
+                        <th className="py-2.5 px-4 text-right">Workforce Cost</th>
+                        <th className="py-2.5 px-4 text-right">Total Revenue</th>
+                        <th className="py-2.5 px-4 text-right">Revenue / FTE</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {simulatedQuarters.map((row, index) => {
+                        return (
+                          <tr key={row.name} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-2.5 px-4 font-bold text-slate-700">{row.name}</td>
+                            <td className="py-2.5 px-4 text-center">
+                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-bold">
+                                {row.headcount}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-600">৳{row.workforceCost}M</td>
+                            <td className="py-2.5 px-4 text-right font-mono text-slate-600">৳{row.totalRevenue}M</td>
+                            <td className="py-2.5 px-4 text-right font-mono font-bold text-indigo-600">৳{row.revenuePerEmployee}K</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 5: Department Headcount Distribution Donut Chart (6-columns) */}
+        <div className="col-span-12 lg:col-span-6 bento-card p-6 flex flex-col justify-between bg-white">
           <div>
             <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight flex items-center gap-1.5">
               <Info className="w-4.5 h-4.5 text-emerald-600" />
@@ -1053,8 +1457,123 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Row 5: Corporate Quick Access & Compliance Directory (8-columns) */}
-        <div className="col-span-12 md:col-span-7 lg:col-span-8 bento-card p-6 flex flex-col justify-between bg-white">
+        {/* Row 5: AI-Driven Compliance Matrix (6-columns - BRAND NEW BENTO CARD) */}
+        <div className="col-span-12 lg:col-span-6 bento-card p-6 bg-white flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Scale className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight flex items-center gap-1.5">
+                    AI-driven Compliance Matrix
+                  </h3>
+                  <p className="text-xs text-slate-400">Statutory BLA 2006 audits scanned in real-time.</p>
+                </div>
+              </div>
+
+              {/* Active Violation Count Badges */}
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-50 border border-rose-100 text-[10px] font-mono font-black text-rose-700">
+                  <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                  {complianceAlerts.filter(a => a.status !== "Resolved").length} ACTIVE BREACHES
+                </span>
+              </div>
+            </div>
+
+            {/* Matrix / List of Real-time violations */}
+            <div className="space-y-3 max-h-[190px] overflow-y-auto pr-1">
+              {complianceAlerts.map((alert) => {
+                const isResolved = alert.status === "Resolved";
+                const isResolving = alert.status === "Resolving";
+
+                // Determine risk-level classes
+                let riskClass = "bg-rose-50 text-rose-700 border-rose-100";
+                if (alert.riskLevel === "High") {
+                  riskClass = "bg-amber-50 text-amber-700 border-amber-100";
+                } else if (alert.riskLevel === "Medium") {
+                  riskClass = "bg-sky-50 text-sky-700 border-sky-100";
+                }
+
+                return (
+                  <div 
+                    key={alert.id} 
+                    className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${
+                      isResolved 
+                        ? "bg-slate-50/50 border-slate-150 opacity-60" 
+                        : "bg-white border-slate-100 hover:border-slate-200"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${
+                          isResolved ? "bg-slate-100 text-slate-400 border-slate-250" : riskClass
+                        }`}>
+                          {alert.riskLevel} Risk
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                          {alert.section}
+                        </span>
+                      </div>
+                      <h4 className={`text-xs font-bold mt-1.5 ${isResolved ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                        {alert.title}
+                      </h4>
+                      <p className={`text-[11px] mt-0.5 leading-snug ${isResolved ? "text-slate-400" : "text-slate-500"}`}>
+                        {alert.description}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 self-end sm:self-center">
+                      {isResolved ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-100 text-[10px] font-mono font-bold text-emerald-700">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          Remediated
+                        </span>
+                      ) : (
+                        <button
+                          disabled={isResolving}
+                          onClick={() => handleResolveAlert(alert.id)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                            isResolving 
+                              ? "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed" 
+                              : "bg-slate-50 border border-slate-100 text-slate-700 hover:bg-emerald-500 hover:text-white hover:border-emerald-600 cursor-pointer"
+                          }`}
+                        >
+                          {isResolving ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                              Fixing...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-3.5 h-3.5" />
+                              {alert.quickFixText}
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="border-t border-slate-100 pt-3 mt-4 flex justify-between items-center text-[10px] text-slate-400 font-mono">
+            <span>Scan Frequency: 30s auto-refresh</span>
+            <span className="flex items-center gap-1 text-emerald-600 font-semibold uppercase">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+              All Engines Nominal
+            </span>
+          </div>
+        </div>
+
+        {/* Row 6: Corporate Quick Access & Compliance Directory (12-columns) */}
+        <div className="col-span-12 bento-card p-6 flex flex-col justify-between bg-white">
           <div>
             <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight flex items-center gap-1.5">
               <FileCheck className="w-4.5 h-4.5 text-emerald-600" />
@@ -1063,7 +1582,7 @@ export default function Dashboard({
             <p className="text-xs text-slate-400">Standard references under Chapter IX of the Bangladesh Labour Act matching our Q3 operational structure.</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
             <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between hover:border-emerald-500/10 transition-colors">
               <div>
                 <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase">Labour Standard IX</span>
@@ -1085,6 +1604,18 @@ export default function Dashboard({
               <div className="mt-3 flex justify-between items-center text-[10px] font-mono font-bold text-teal-600">
                 <span>Active Ledger Coverage: 100%</span>
                 <CheckCircle className="w-4 h-4 text-teal-500" />
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between hover:border-emerald-500/10 transition-colors">
+              <div>
+                <span className="text-[9px] font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded uppercase">Benefits & Bonuses</span>
+                <h4 className="text-xs font-bold text-slate-800 mt-2">Festival Bonus Regulations</h4>
+                <p className="text-slate-500 text-[11px] mt-1 leading-relaxed">Section 111 / Rules enforce twice-yearly festival bonus distribution for contractual and permanent staff.</p>
+              </div>
+              <div className="mt-3 flex justify-between items-center text-[10px] font-mono font-bold text-indigo-600">
+                <span>Distribution Status: Active</span>
+                <CheckCircle className="w-4 h-4 text-indigo-500" />
               </div>
             </div>
           </div>
