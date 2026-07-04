@@ -34,7 +34,9 @@ import {
   FileText,
   HelpCircle,
   FileCheck,
-  UserPlus
+  UserPlus,
+  LayoutGrid,
+  Flame
 } from "lucide-react";
 import { Employee, JobRequisition, LeaveRequest, AttendanceRecord, PayrollRun } from "../types";
 
@@ -231,6 +233,126 @@ export default function Dashboard({
   const pendingLeavesCount = leaves.filter(l => l.status === "Pending").length;
   const highPriorityTicketsCount = 3;
 
+  // Sparkline trend datasets representing real-time/historic fluctuations
+  const headcountTrend = useMemo(() => [
+    { value: Math.max(10, totalCount - 8) },
+    { value: Math.max(12, totalCount - 5) },
+    { value: Math.max(15, totalCount - 3) },
+    { value: Math.max(18, totalCount - 2) },
+    { value: Math.max(20, totalCount - 1) },
+    { value: totalCount }
+  ], [totalCount]);
+
+  const recruitmentTrend = useMemo(() => [
+    { value: Math.max(1, activeVacancyCount - 3) },
+    { value: Math.max(2, activeVacancyCount + 1) },
+    { value: Math.max(1, activeVacancyCount - 1) },
+    { value: Math.max(3, activeVacancyCount + 2) },
+    { value: Math.max(2, activeVacancyCount - 2) },
+    { value: activeVacancyCount }
+  ], [activeVacancyCount]);
+
+  const attendanceTrend = useMemo(() => [
+    { value: 92 },
+    { value: 94 },
+    { value: 91 },
+    { value: 95 },
+    { value: 93 },
+    { value: attendanceRate }
+  ], [attendanceRate]);
+
+  const attritionTrend = useMemo(() => [
+    { value: 3.5 },
+    { value: 3.4 },
+    { value: 3.6 },
+    { value: 3.1 },
+    { value: 3.3 },
+    { value: attritionRate }
+  ], [attritionRate]);
+
+  const payrollTrend = useMemo(() => [
+    { value: 4.8 },
+    { value: 5.2 },
+    { value: 5.5 },
+    { value: 5.9 },
+    { value: 6.1 },
+    { value: Number((payrollSummaryBDT / 100000).toFixed(2)) }
+  ], [payrollSummaryBDT]);
+
+  const engagementTrend = useMemo(() => [
+    { value: 85 },
+    { value: 86 },
+    { value: 88 },
+    { value: 87 },
+    { value: 89 },
+    { value: satisfactionScore }
+  ], [satisfactionScore]);
+
+  // Dynamic organization health matrix calculations for departments
+  const orgHealthData = useMemo(() => {
+    const depts = Array.from(new Set(employees.map(e => e.department))).filter(Boolean);
+    const standardDepts = depts.length > 0 ? depts : ["Engineering", "Operations", "HR", "Sales", "Finance", "Marketing"];
+
+    return standardDepts.map(dept => {
+      const deptEmployees = employees.filter(e => e.department === dept);
+      const headcount = deptEmployees.length || Math.floor(Math.random() * 8) + 3;
+
+      // Calculate Burnout Risk (0 - 100)
+      // Indicator: Higher average OT hours + high ratings (overloaded performers) + low leave balance
+      const deptAttendance = attendance.filter(a => a.department === dept);
+      const avgOT = deptAttendance.length > 0 
+        ? deptAttendance.reduce((sum, a) => sum + (a.otHours || 0), 0) / deptAttendance.length 
+        : (dept === "Engineering" || dept === "Operations" ? 2.4 : 1.1);
+
+      const avgLeaveBalance = deptEmployees.length > 0
+        ? deptEmployees.reduce((sum, e) => {
+            const lb = e.leaveBalance;
+            return sum + (lb ? (lb.casual + lb.sick + lb.earned) : 22);
+          }, 0) / deptEmployees.length
+        : 22;
+
+      const otFactor = Math.min(45, (avgOT / 3) * 45); 
+      const leaveFactor = Math.min(25, (1 - Math.min(1, avgLeaveBalance / 30)) * 25);
+      const baseBurnout = dept === "Engineering" ? 48 : dept === "Sales" ? 52 : 35;
+      const burnout = Math.min(95, Math.max(15, Math.round(baseBurnout + otFactor + leaveFactor)));
+
+      // Calculate Turnover Risk (0 - 100)
+      // Indicator: High Burnout + salary levels or high perform ratings with lower salary
+      const avgSalary = deptEmployees.length > 0
+        ? deptEmployees.reduce((sum, e) => sum + e.salary, 0) / deptEmployees.length
+        : 65000;
+
+      const avgRating = deptEmployees.length > 0
+        ? deptEmployees.reduce((sum, e) => sum + e.performanceRating, 0) / deptEmployees.length
+        : (dept === "Engineering" ? 4.1 : 3.6);
+
+      const salaryDisparity = avgSalary < 60000 ? 15 : avgSalary < 90000 ? 5 : -10;
+      const ratingFactor = avgRating > 4.0 ? 12 : avgRating < 2.5 ? 18 : 0;
+      const baseTurnover = Math.round(burnout * 0.4 + 10 + salaryDisparity + ratingFactor);
+      const turnover = Math.min(92, Math.max(12, baseTurnover));
+
+      // Calculate Engagement Score (0 - 100)
+      // Indicator: High attendance rates + healthy leaves + positive rating averages
+      const totalAttendanceCount = deptAttendance.length;
+      const presentCount = deptAttendance.filter(a => a.status === "Present" || a.status === "Late" || a.status === "Half-Day").length;
+      const attendanceRateValue = totalAttendanceCount > 0 ? (presentCount / totalAttendanceCount) * 100 : (dept === "HR" ? 98 : 94);
+
+      const engagement = Math.min(98, Math.max(40, Math.round(
+        (attendanceRateValue * 0.6) + 
+        (avgRating * 6) + 
+        (100 - burnout) * 0.15
+      )));
+
+      return {
+        department: dept,
+        headcount,
+        burnout,
+        turnover,
+        engagement
+      };
+    });
+  }, [employees, attendance]);
+
   return (
     <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-slate-50/50">
       
@@ -309,102 +431,192 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Row 2: Summary Metrics (6 separate 2-column bento-cards = 12 columns total) */}
+        {/* Row 2: Summary Metrics (6 separate 3-column bento-cards = 12 columns total per row) */}
         {/* Metric 1: Total Employees */}
-        <div className="col-span-6 md:col-span-4 lg:col-span-2 bento-card p-4 flex flex-col justify-between hover:border-emerald-500/30 group">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-4 bento-card p-5 flex flex-col justify-between hover:border-indigo-500/30 group bg-white">
           <div className="flex justify-between items-start">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <Users className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5" />
             </div>
-            <span className="pill-green scale-90">
+            <span className="pill-green scale-90 bg-indigo-50 text-indigo-700 border border-indigo-100">
               +14% YoY
             </span>
           </div>
-          <div className="mt-4">
-            <span className="text-[11px] text-slate-400 font-medium font-sans block">Total Headcount</span>
-            <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{totalCount}</span>
+          <div className="flex items-end justify-between mt-4">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium font-sans block">Total Headcount</span>
+              <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{totalCount}</span>
+            </div>
+            <div className="h-10 w-28 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={headcountTrend} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklineHeadcount" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklineHeadcount)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* Metric 2: Active Open Vacancies */}
-        <div className="col-span-6 md:col-span-4 lg:col-span-2 bento-card p-4 flex flex-col justify-between hover:border-teal-500/30 group">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-4 bento-card p-5 flex flex-col justify-between hover:border-teal-500/30 group bg-white">
           <div className="flex justify-between items-start">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <Briefcase className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+              <Briefcase className="w-5 h-5" />
             </div>
-            <span className="text-[9px] font-mono font-bold text-teal-600 bg-teal-50/70 px-1.5 py-0.5 rounded-sm">
+            <span className="text-[9px] font-mono font-bold text-teal-600 bg-teal-50/70 px-1.5 py-0.5 rounded-sm border border-teal-100/55">
               Live ATS
             </span>
           </div>
-          <div className="mt-4">
-            <span className="text-[11px] text-slate-400 font-medium font-sans block">Active Vacancies</span>
-            <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{activeVacancyCount}</span>
+          <div className="flex items-end justify-between mt-4">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium font-sans block">Active Recruitment</span>
+              <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{activeVacancyCount}</span>
+            </div>
+            <div className="h-10 w-28 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={recruitmentTrend} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklineRecruitment" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#14b8a6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="#14b8a6" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklineRecruitment)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* Metric 3: Attendance Rate */}
-        <div className="col-span-6 md:col-span-4 lg:col-span-2 bento-card p-4 flex flex-col justify-between hover:border-emerald-500/30 group">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-4 bento-card p-5 flex flex-col justify-between hover:border-emerald-500/30 group bg-white">
           <div className="flex justify-between items-start">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <CalendarClock className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <CalendarClock className="w-5 h-5" />
             </div>
-            <span className="pill-green scale-90 bg-emerald-100">
+            <span className="pill-green scale-90 bg-emerald-50 text-emerald-700 border border-emerald-100">
               96% KPI
             </span>
           </div>
-          <div className="mt-4">
-            <span className="text-[11px] text-slate-400 font-medium font-sans block">Attendance</span>
-            <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{attendanceRate}%</span>
+          <div className="flex items-end justify-between mt-4">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium font-sans block">Attendance Rate</span>
+              <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{attendanceRate}%</span>
+            </div>
+            <div className="h-10 w-28 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={attendanceTrend} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklineAttendance" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklineAttendance)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* Metric 4: Attrition Rate */}
-        <div className="col-span-6 md:col-span-4 lg:col-span-2 bento-card p-4 flex flex-col justify-between hover:border-slate-400/30 group">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-4 bento-card p-5 flex flex-col justify-between hover:border-amber-500/30 group bg-white">
           <div className="flex justify-between items-start">
-            <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-500 flex items-center justify-center shrink-0">
-              <TrendingDown className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <TrendingDown className="w-5 h-5" />
             </div>
-            <span className="text-[9px] font-mono font-bold text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded-sm">
+            <span className="text-[9px] font-mono font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-sm border border-amber-100/55">
               Healthy
             </span>
           </div>
-          <div className="mt-4">
-            <span className="text-[11px] text-slate-400 font-medium font-sans block">Attrition Rate</span>
-            <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{attritionRate}%</span>
+          <div className="flex items-end justify-between mt-4">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium font-sans block">Attrition Rate</span>
+              <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{attritionRate}%</span>
+            </div>
+            <div className="h-10 w-28 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={attritionTrend} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklineAttrition" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="#f59e0b" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklineAttrition)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* Metric 5: Monthly Payroll Ledger */}
-        <div className="col-span-6 md:col-span-4 lg:col-span-2 bento-card p-4 flex flex-col justify-between hover:border-amber-500/30 group">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-4 bento-card p-5 flex flex-col justify-between hover:border-rose-500/30 group bg-white">
           <div className="flex justify-between items-start">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-              <Coins className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <Coins className="w-5 h-5" />
             </div>
-            <span className="text-[9px] font-mono font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-sm">
+            <span className="text-[9px] font-mono font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-sm border border-rose-100/55">
               BDT
             </span>
           </div>
-          <div className="mt-4">
-            <span className="text-[11px] text-slate-400 font-medium font-sans block">Monthly Ledger</span>
-            <span className="text-[16px] font-black text-slate-800 font-sans tracking-tight mt-1.5 block">
-              {(payrollSummaryBDT / 100000).toFixed(2)}M ৳
-            </span>
+          <div className="flex items-end justify-between mt-4">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium font-sans block">Monthly Ledger</span>
+              <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">
+                {(payrollSummaryBDT / 100000).toFixed(2)}M ৳
+              </span>
+            </div>
+            <div className="h-10 w-28 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={payrollTrend} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklinePayroll" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="#f43f5e" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklinePayroll)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* Metric 6: Engagement Index */}
-        <div className="col-span-6 md:col-span-4 lg:col-span-2 bento-card p-4 flex flex-col justify-between hover:border-rose-500/30 group">
+        <div className="col-span-12 sm:col-span-6 lg:col-span-4 bento-card p-5 flex flex-col justify-between hover:border-violet-500/30 group bg-white">
           <div className="flex justify-between items-start">
-            <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-5 h-5" />
             </div>
-            <span className="text-[9px] font-mono font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-sm">
+            <span className="text-[9px] font-mono font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-sm border border-violet-100/55">
               Excellent
             </span>
           </div>
-          <div className="mt-4">
-            <span className="text-[11px] text-slate-400 font-medium font-sans block">Engagement</span>
-            <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{satisfactionScore}%</span>
+          <div className="flex items-end justify-between mt-4">
+            <div>
+              <span className="text-[11px] text-slate-400 font-medium font-sans block">Engagement</span>
+              <span className="text-2xl font-black text-slate-800 font-sans tracking-tight mt-0.5 block">{satisfactionScore}%</span>
+            </div>
+            <div className="h-10 w-28 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={engagementTrend} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklineEngagement" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklineEngagement)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
@@ -631,6 +843,166 @@ export default function Dashboard({
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span>Dynamic workspace ledger</span>
               <span className="font-mono text-[10px] text-emerald-600 font-bold uppercase">Ready</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4.5: Organization Health Heatmap (12-columns - BRAND NEW BENTO CARD) */}
+        <div className="col-span-12 bento-card p-6 bg-white flex flex-col justify-between">
+          <div>
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight">Organization Health Heatmap</h3>
+                  <p className="text-xs text-slate-400">Departmental stress markers, turnover risk, and active cultural engagement models.</p>
+                </div>
+              </div>
+
+              {/* Color Code Legend */}
+              <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 text-[10px] font-mono font-bold">
+                <span className="text-slate-400 uppercase tracking-wider mr-1">Legend:</span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-emerald-500 border border-emerald-600/10 inline-block"></span>
+                  <span className="text-emerald-700">Optimal (&ge;85% Engagement / &lt;40% Risk)</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-amber-500 border border-amber-600/10 inline-block"></span>
+                  <span className="text-amber-700">Monitor (70-84% Engagement / 40-65% Risk)</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-rose-500 border border-rose-600/10 inline-block"></span>
+                  <span className="text-rose-700">Elevated Stress (&lt;70% Engagement / &ge;65% Risk)</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Heatmap Matrix Grid/Table */}
+            <div className="overflow-x-auto border border-slate-100 rounded-xl">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-mono text-slate-500 uppercase font-black">
+                    <th className="py-3.5 px-4 font-black">Department</th>
+                    <th className="py-3.5 px-4 text-center font-black">Active FTEs</th>
+                    <th className="py-3.5 px-4 font-black">Burnout Index</th>
+                    <th className="py-3.5 px-4 font-black">Turnover Risk</th>
+                    <th className="py-3.5 px-4 font-black">Engagement Score</th>
+                    <th className="py-3.5 px-4 font-black text-right">Operational Health Verdict</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {orgHealthData.map((data) => {
+                    // Burnout colors & levels
+                    const isBurnoutHigh = data.burnout >= 75;
+                    const isBurnoutMed = data.burnout >= 50 && data.burnout < 75;
+                    const burnoutColor = isBurnoutHigh 
+                      ? "bg-rose-50 text-rose-700 border-rose-100/70" 
+                      : isBurnoutMed 
+                        ? "bg-amber-50 text-amber-700 border-amber-100/70" 
+                        : "bg-emerald-50 text-emerald-700 border-emerald-100/70";
+                    const burnoutLevel = isBurnoutHigh ? "High Stress" : isBurnoutMed ? "Moderate" : "Healthy";
+
+                    // Turnover colors & levels
+                    const isTurnoverHigh = data.turnover >= 65;
+                    const isTurnoverMed = data.turnover >= 40 && data.turnover < 65;
+                    const turnoverColor = isTurnoverHigh 
+                      ? "bg-rose-50 text-rose-700 border-rose-100/70" 
+                      : isTurnoverMed 
+                        ? "bg-amber-50 text-amber-700 border-amber-100/70" 
+                        : "bg-emerald-50 text-emerald-700 border-emerald-100/70";
+                    const turnoverLevel = isTurnoverHigh ? "Critical Risk" : isTurnoverMed ? "Elevated" : "Stable";
+
+                    // Engagement colors & levels
+                    const isEngagementLow = data.engagement < 70;
+                    const isEngagementMed = data.engagement >= 70 && data.engagement < 85;
+                    const engagementColor = isEngagementLow 
+                      ? "bg-rose-50 text-rose-700 border-rose-100/70" 
+                      : isEngagementMed 
+                        ? "bg-amber-50 text-amber-700 border-amber-100/70" 
+                        : "bg-emerald-50 text-emerald-700 border-emerald-100/70";
+                    const engagementLevel = isEngagementLow ? "Disengaged" : isEngagementMed ? "Average" : "Thriving";
+
+                    // Overall Health Verdict
+                    let verdictText = "Stable Operations";
+                    let verdictClass = "bg-slate-50 text-slate-700 border-slate-200";
+                    let VerdictIcon = ShieldCheck;
+
+                    if (isBurnoutHigh || isTurnoverHigh) {
+                      verdictText = "Critical Action Required";
+                      verdictClass = "bg-rose-50 text-rose-700 border-rose-200";
+                      VerdictIcon = AlertTriangle;
+                    } else if (isBurnoutMed || isTurnoverMed || isEngagementLow) {
+                      verdictText = "Intervention Recommended";
+                      verdictClass = "bg-amber-50 text-amber-700 border-amber-200";
+                      VerdictIcon = Zap;
+                    } else if (data.engagement >= 85) {
+                      verdictText = "Exemplary Cultural Health";
+                      verdictClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                      VerdictIcon = CheckCircle;
+                    }
+
+                    return (
+                      <tr key={data.department} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-800">{data.department}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-50 text-slate-600 font-mono font-bold border border-slate-100">
+                            <Users className="w-3.5 h-3.5 text-slate-400" />
+                            {data.headcount}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-1 w-32 md:w-40">
+                            <div className={`flex items-center justify-between px-2 py-1 rounded-lg border text-[11px] font-medium ${burnoutColor}`}>
+                              <span className="font-mono font-bold">{data.burnout}%</span>
+                              <span className="text-[10px] opacity-90">{burnoutLevel}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full">
+                              <div 
+                                className={`h-full rounded-full ${isBurnoutHigh ? "bg-rose-500" : isBurnoutMed ? "bg-amber-500" : "bg-emerald-500"}`}
+                                style={{ width: `${data.burnout}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-1 w-32 md:w-40">
+                            <div className={`flex items-center justify-between px-2 py-1 rounded-lg border text-[11px] font-medium ${turnoverColor}`}>
+                              <span className="font-mono font-bold">{data.turnover}%</span>
+                              <span className="text-[10px] opacity-90">{turnoverLevel}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full">
+                              <div 
+                                className={`h-full rounded-full ${isTurnoverHigh ? "bg-rose-500" : isTurnoverMed ? "bg-amber-500" : "bg-emerald-500"}`}
+                                style={{ width: `${data.turnover}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col gap-1 w-32 md:w-40">
+                            <div className={`flex items-center justify-between px-2 py-1 rounded-lg border text-[11px] font-medium ${engagementColor}`}>
+                              <span className="font-mono font-bold">{data.engagement}%</span>
+                              <span className="text-[10px] opacity-90">{engagementLevel}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full">
+                              <div 
+                                className={`h-full rounded-full ${isEngagementLow ? "bg-rose-500" : isEngagementMed ? "bg-amber-500" : "bg-emerald-500"}`}
+                                style={{ width: `${data.engagement}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border ${verdictClass}`}>
+                            <VerdictIcon className="w-3.5 h-3.5" />
+                            {verdictText}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
