@@ -107,7 +107,7 @@ export default function App() {
   const handleUpdateEmployee = async (updatedEmp: Employee) => {
     setEmployees(employees.map(e => e.id === updatedEmp.id ? updatedEmp : e));
     try {
-      await fetch("/api/employees", {
+      await fetch(`/api/employees/${updatedEmp.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedEmp)
@@ -430,6 +430,7 @@ export default function App() {
             attendance={attendance} 
             payroll={payroll} 
             activeRole={activeRole} 
+            goals={goals}
           />
         );
       case "directory":

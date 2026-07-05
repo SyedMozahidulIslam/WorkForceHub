@@ -1188,9 +1188,9 @@ export const initialPayrollRuns: PayrollRun[] = [
 ];
 
 export const initialGoals: PerformanceGoal[] = [
-  { id: "G-001", employeeId: "EMP-006", employeeName: "Arafat Hamim", title: "Migrate legacy app to scalable Express / Vite full-stack server", category: "OKR", progress: 95, targetDate: "2026-07-15", status: "In Progress" },
-  { id: "G-002", employeeId: "EMP-008", employeeName: "Shahariar", title: "Implement comprehensive enterprise micro-interactions & glassmorphism system", category: "KPI", progress: 100, targetDate: "2026-06-30", status: "Completed" },
-  { id: "G-003", employeeId: "EMP-009", employeeName: "Muntakim", title: "Develop CV screening parser & AI candidate ranking engine backend integration", category: "OKR", progress: 80, targetDate: "2026-07-10", status: "In Progress" }
+  { id: "G-001", employeeId: "EMP-006", employeeName: "Arafat Hamim", title: "Migrate legacy app to scalable Express / Vite full-stack server", category: "OKR", progress: 95, startDate: "2026-04-01", targetDate: "2026-07-15", status: "In Progress" },
+  { id: "G-002", employeeId: "EMP-008", employeeName: "Shahariar", title: "Implement comprehensive enterprise micro-interactions & glassmorphism system", category: "KPI", progress: 100, startDate: "2026-03-01", targetDate: "2026-06-30", status: "Completed" },
+  { id: "G-003", employeeId: "EMP-009", employeeName: "Muntakim", title: "Develop CV screening parser & AI candidate ranking engine backend integration", category: "OKR", progress: 80, startDate: "2026-05-01", targetDate: "2026-07-10", status: "In Progress" }
 ];
 
 export const initialCourses: Course[] = [

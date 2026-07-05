@@ -17,7 +17,9 @@ import {
   HeartHandshake, 
   TrendingUp, 
   Bookmark,
-  ChevronRight
+  ChevronRight,
+  Users,
+  DollarSign
 } from "lucide-react";
 import { Employee, UserRole } from "../types";
 
@@ -37,6 +39,7 @@ export default function Directory({
   
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDept, setSelectedDept] = useState("All");
+  const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -47,6 +50,69 @@ export default function Directory({
   const [editBankAcc, setEditBankAcc] = useState("");
   const [editBankName, setEditBankName] = useState("");
   const [editSkillsString, setEditSkillsString] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+
+  // Bulk selection and action states
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkActionType, setBulkActionType] = useState<"dept" | "location" | null>(null);
+  const [bulkDeptValue, setBulkDeptValue] = useState("");
+  const [bulkLocValue, setBulkLocValue] = useState("");
+
+  // Helper to resolve employee location
+  const getEmployeeLocation = (emp: Employee) => {
+    if (emp.location) return emp.location;
+    if (emp.role.toLowerCase().includes("chittagong")) return "Chittagong Office";
+    if (emp.role.toLowerCase().includes("remote") || emp.name === "Muntakim") return "Remote";
+    if (emp.id === "EMP-016") return "Chittagong Office";
+    const idNum = parseInt(emp.id.replace("EMP-", ""), 10);
+    if (isNaN(idNum)) return "Dhaka HQ";
+    if (idNum % 4 === 0) return "Remote";
+    if (idNum % 5 === 0) return "Sylhet Office";
+    if (idNum % 7 === 0) return "Chittagong Office";
+    return "Dhaka HQ";
+  };
+
+  // Helper to resolve employee gender
+  const getEmployeeGender = (emp: Employee) => {
+    const nameLower = emp.name.toLowerCase();
+    if (
+      nameLower.includes("suchana") || 
+      nameLower.includes("shifa") || 
+      nameLower.includes("nishat") || 
+      nameLower.includes("tasnim") || 
+      nameLower.includes("laila") || 
+      nameLower.includes("farhana") || 
+      nameLower.includes("sabrina") || 
+      nameLower.includes("rokeya") || 
+      nameLower.includes("asma") || 
+      nameLower.includes("fatema") || 
+      nameLower.includes("israt") || 
+      nameLower.includes("shirin") || 
+      nameLower.includes("hasna") || 
+      nameLower.includes("afroza") || 
+      nameLower.includes("nusrat") || 
+      nameLower.includes("sadia") || 
+      nameLower.includes("rumana") || 
+      nameLower.includes("maliha") || 
+      nameLower.includes("anika") || 
+      nameLower.includes("jahan") || 
+      nameLower.includes("tanjina") || 
+      nameLower.includes("ayesha") || 
+      nameLower.includes("samia") || 
+      nameLower.includes("mehnaz") || 
+      nameLower.includes("tasmiah") || 
+      nameLower.includes("noshin") || 
+      nameLower.includes("lamia") || 
+      nameLower.includes("afia") || 
+      nameLower.includes("shahnaz") || 
+      nameLower.includes("dilruba") || 
+      nameLower.includes("rowshan") ||
+      (emp.leaveBalance && emp.leaveBalance.maternity > 0)
+    ) {
+      return "Female";
+    }
+    return "Male";
+  };
 
   // Unique list of departments
   const departments = useMemo(() => {
@@ -54,19 +120,96 @@ export default function Directory({
     return ["All", ...Array.from(depts)];
   }, [employees]);
 
+  // Unique list of locations
+  const locations = useMemo(() => {
+    const locs = new Set(employees.map(e => getEmployeeLocation(e)));
+    return ["All Locations", ...Array.from(locs)];
+  }, [employees]);
+
+  // Unique actual departments for bulk updating
+  const actualDepartments = useMemo(() => {
+    const depts = new Set(employees.map(e => e.department));
+    return Array.from(depts).filter(Boolean);
+  }, [employees]);
+
+  // Unique actual locations for bulk updating
+  const actualLocations = useMemo(() => {
+    const locs = new Set(employees.map(e => getEmployeeLocation(e)));
+    return Array.from(locs).filter(Boolean);
+  }, [employees]);
+
+  // Handle single employee selection checkbox
+  const toggleSelectEmployee = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Apply bulk update actions
+  const applyBulkAction = () => {
+    if (!bulkActionType) return;
+    
+    selectedIds.forEach(id => {
+      const emp = employees.find(e => e.id === id);
+      if (emp) {
+        const updated: Employee = {
+          ...emp,
+          ...(bulkActionType === "dept" && bulkDeptValue ? { department: bulkDeptValue } : {}),
+          ...(bulkActionType === "location" && bulkLocValue ? { location: bulkLocValue } : {})
+        };
+        onUpdateEmployee(updated);
+      }
+    });
+
+    // Reset selection & control states
+    setSelectedIds([]);
+    setBulkActionType(null);
+    setBulkDeptValue("");
+    setBulkLocValue("");
+  };
+
   // Filtered employees
   const filteredEmployees = useMemo(() => {
     return employees.filter(emp => {
+      const loc = getEmployeeLocation(emp);
       const matchSearch = 
         emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        loc.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.skills.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchDept = selectedDept === "All" || emp.department === selectedDept;
+      const matchLoc = selectedLocation === "All Locations" || loc === selectedLocation;
       
-      return matchSearch && matchDept;
+      return matchSearch && matchDept && matchLoc;
     });
-  }, [employees, searchTerm, selectedDept]);
+  }, [employees, searchTerm, selectedDept, selectedLocation]);
+
+  // Memoized average salary
+  const avgSalary = useMemo(() => {
+    if (filteredEmployees.length === 0) return 0;
+    const totalSalary = filteredEmployees.reduce((sum, e) => sum + e.salary, 0);
+    return Math.round(totalSalary / filteredEmployees.length);
+  }, [filteredEmployees]);
+
+  // Memoized gender stats
+  const genderStats = useMemo(() => {
+    let male = 0;
+    let female = 0;
+    filteredEmployees.forEach((emp) => {
+      if (getEmployeeGender(emp) === "Female") {
+        female++;
+      } else {
+        male++;
+      }
+    });
+    const total = filteredEmployees.length;
+    const femalePercent = total > 0 ? Math.round((female / total) * 100) : 0;
+    const malePercent = total > 0 ? Math.round((male / total) * 100) : 0;
+    return { male, female, femalePercent, malePercent };
+  }, [filteredEmployees]);
 
   const handleSelectEmployee = (emp: Employee) => {
     setSelectedEmp(emp);
@@ -78,6 +221,7 @@ export default function Directory({
     setEditBankAcc(emp.bankAccount);
     setEditBankName(emp.bankName);
     setEditSkillsString(emp.skills.join(", "));
+    setEditLocation(getEmployeeLocation(emp));
   };
 
   const handleSaveEdit = async () => {
@@ -90,7 +234,8 @@ export default function Directory({
       emergencyContactPhone: editEmergencyPhone,
       bankAccount: editBankAcc,
       bankName: editBankName,
-      skills: editSkillsString.split(",").map(s => s.trim()).filter(Boolean)
+      skills: editSkillsString.split(",").map(s => s.trim()).filter(Boolean),
+      location: editLocation
     };
 
     onUpdateEmployee(updated);
@@ -125,8 +270,63 @@ export default function Directory({
           </div>
         </div>
 
+        {/* Summary Statistics Dashboard */}
+        <div id="directory-stats-grid" className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Card 1: Headcount */}
+          <div className="bento-card p-4 flex items-center justify-between bg-white border border-slate-100 shadow-xs rounded-2xl">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold font-mono tracking-wider uppercase text-slate-400">Headcount</span>
+              <h3 className="text-2xl font-black font-sans text-slate-800 tracking-tight">
+                {filteredEmployees.length}
+              </h3>
+              <p className="text-[10px] text-slate-500 font-medium">
+                {selectedDept === "All" ? "Across all departments" : `In ${selectedDept}`}
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50/80 rounded-xl text-emerald-600 shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Card 2: Average Salary */}
+          <div className="bento-card p-4 flex items-center justify-between bg-white border border-slate-100 shadow-xs rounded-2xl">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold font-mono tracking-wider uppercase text-slate-400">Average Salary</span>
+              <h3 className="text-2xl font-black font-sans text-slate-800 tracking-tight">
+                ৳{avgSalary.toLocaleString("en-US")}
+              </h3>
+              <p className="text-[10px] text-slate-500 font-medium">
+                Monthly base BDT run-rate
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50/80 rounded-xl text-emerald-600 shrink-0">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Card 3: Gender Diversity */}
+          <div className="bento-card p-4 flex items-center justify-between bg-white border border-slate-100 shadow-xs rounded-2xl">
+            <div className="space-y-1 flex-1">
+              <span className="text-[11px] font-bold font-mono tracking-wider uppercase text-slate-400">Gender Diversity</span>
+              <h3 className="text-lg font-black font-sans text-slate-800 tracking-tight flex items-baseline gap-1.5 mt-0.5">
+                <span>{genderStats.femalePercent}%</span>
+                <span className="text-xs font-medium text-slate-400">Female</span>
+                <span className="text-slate-300">|</span>
+                <span>{genderStats.malePercent}%</span>
+                <span className="text-xs font-medium text-slate-400">Male</span>
+              </h3>
+              <p className="text-[10px] text-slate-500 font-medium truncate">
+                {genderStats.female} Female · {genderStats.male} Male
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50/80 rounded-xl text-emerald-600 shrink-0 self-center">
+              <HeartHandshake className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+
         {/* Search & Filter Toolbar */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6 bento-card p-4">
+        <div className="flex flex-col md:flex-row gap-3 mb-6 bento-card p-4">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
             <input
@@ -134,44 +334,233 @@ export default function Directory({
               id="directory-search-input"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by employee name, job role, or specific skills..."
+              placeholder="Search by name, department, location, job role, or skills..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-10 pr-4 text-xs font-sans text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-            <select
-              id="directory-dept-select"
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-sans font-medium text-slate-600 focus:outline-none focus:border-emerald-500"
-            >
-              {departments.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold font-mono uppercase text-slate-400 shrink-0">Dept:</span>
+              <select
+                id="directory-dept-select"
+                value={selectedDept}
+                onChange={(e) => setSelectedDept(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-sans font-medium text-slate-600 focus:outline-none focus:border-emerald-500"
+              >
+                {departments.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold font-mono uppercase text-slate-400 shrink-0">Location:</span>
+              <select
+                id="directory-location-select"
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-sans font-medium text-slate-600 focus:outline-none focus:border-emerald-500"
+              >
+                {locations.map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </div>
           </div>
+        </div>
+
+        {/* Bulk Action Toolbar */}
+        {selectedIds.length > 0 && (
+          <div id="directory-bulk-toolbar" className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 animate-fade-in shadow-xs">
+            <div className="flex items-center gap-3">
+              <span className="py-1 px-2.5 bg-emerald-600 text-white rounded-xl font-extrabold text-xs font-mono">
+                {selectedIds.length} SELECTED
+              </span>
+              <p className="text-xs text-slate-600 font-medium font-sans">
+                Apply a bulk action to the selected employee profiles
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold font-mono text-slate-400 uppercase">Action:</span>
+                <select
+                  id="bulk-action-type-select"
+                  value={bulkActionType || ""}
+                  onChange={(e) => {
+                    const val = e.target.value as "dept" | "location" | "";
+                    setBulkActionType(val || null);
+                    setBulkDeptValue("");
+                    setBulkLocValue("");
+                  }}
+                  className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-sans font-medium text-slate-700 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- Choose Action --</option>
+                  <option value="dept">Assign Department</option>
+                  <option value="location">Update Location</option>
+                </select>
+              </div>
+
+              {bulkActionType === "dept" && (
+                <div className="flex items-center gap-2">
+                  <select
+                    id="bulk-dept-value-select"
+                    value={bulkDeptValue}
+                    onChange={(e) => setBulkDeptValue(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-sans font-medium text-slate-700 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">-- Select Department --</option>
+                    {actualDepartments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                    <option value="NEW_CUSTOM">Custom...</option>
+                  </select>
+                  {bulkDeptValue === "NEW_CUSTOM" && (
+                    <input
+                      type="text"
+                      placeholder="Custom Dept..."
+                      id="bulk-custom-dept-input"
+                      className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-sans text-slate-800 focus:outline-none focus:border-emerald-500 w-36"
+                      onBlur={(e) => {
+                        if (e.target.value.trim()) {
+                          setBulkDeptValue(e.target.value.trim());
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {bulkActionType === "location" && (
+                <div className="flex items-center gap-2">
+                  <select
+                    id="bulk-loc-value-select"
+                    value={bulkLocValue}
+                    onChange={(e) => setBulkLocValue(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-sans font-medium text-slate-700 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">-- Select Location --</option>
+                    {actualLocations.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                    <option value="NEW_CUSTOM">Custom...</option>
+                  </select>
+                  {bulkLocValue === "NEW_CUSTOM" && (
+                    <input
+                      type="text"
+                      placeholder="Custom Loc..."
+                      id="bulk-custom-loc-input"
+                      className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-sans text-slate-800 focus:outline-none focus:border-emerald-500 w-36"
+                      onBlur={(e) => {
+                        if (e.target.value.trim()) {
+                          setBulkLocValue(e.target.value.trim());
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  id="bulk-action-apply-btn"
+                  onClick={applyBulkAction}
+                  disabled={!bulkActionType || (bulkActionType === "dept" && !bulkDeptValue) || (bulkActionType === "location" && !bulkLocValue)}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs py-1.5 px-4 rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
+                >
+                  Apply
+                </button>
+
+                <button
+                  id="bulk-action-cancel-btn"
+                  onClick={() => {
+                    setSelectedIds([]);
+                    setBulkActionType(null);
+                    setBulkDeptValue("");
+                    setBulkLocValue("");
+                  }}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs py-1.5 px-3 rounded-xl transition-all shrink-0 cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* List Summary & Select All Row */}
+        <div className="flex items-center justify-between mb-4 bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+          <p className="text-xs font-medium text-slate-500 font-sans">
+            Showing <span className="text-slate-800 font-bold font-mono">{filteredEmployees.length}</span> team profiles
+          </p>
+          <button
+            id="bulk-select-all-btn"
+            onClick={() => {
+              const allFilteredIds = filteredEmployees.map(e => e.id);
+              const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.includes(id));
+              if (isAllSelected) {
+                // Deselect all filtered
+                setSelectedIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+              } else {
+                // Select all filtered
+                setSelectedIds(prev => {
+                  const union = new Set([...prev, ...allFilteredIds]);
+                  return Array.from(union);
+                });
+              }
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 hover:bg-emerald-100/70 py-1 px-3 rounded-xl cursor-pointer"
+          >
+            {filteredEmployees.length > 0 && filteredEmployees.map(e => e.id).every(id => selectedIds.includes(id)) ? (
+              <>
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                Deselect All Filtered
+              </>
+            ) : (
+              <>
+                <Users className="w-3.5 h-3.5" />
+                Select All Filtered
+              </>
+            )}
+          </button>
         </div>
 
         {/* Employee Grid */}
         <div id="directory-employee-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filteredEmployees.map((emp) => {
             const isSelected = selectedEmp?.id === emp.id;
+            const isChecked = selectedIds.includes(emp.id);
             return (
               <div
                 key={emp.id}
                 id={`emp-card-${emp.id}`}
                 onClick={() => handleSelectEmployee(emp)}
-                className={`bento-card p-5 cursor-pointer flex gap-4 ${
+                className={`bento-card p-5 cursor-pointer flex gap-3.5 items-start relative transition-all duration-200 ${
                   isSelected 
-                    ? "border-emerald-500 ring-2 ring-emerald-500/15" 
-                    : ""
-                }`}
+                    ? "border-emerald-500 ring-2 ring-emerald-500/15 bg-slate-50/50" 
+                    : "hover:border-slate-300"
+                } ${isChecked ? "bg-emerald-50/10 border-emerald-300" : ""}`}
               >
+                {/* Checkbox */}
+                <div 
+                  id={`emp-checkbox-wrapper-${emp.id}`}
+                  onClick={(e) => toggleSelectEmployee(emp.id, e)}
+                  className="flex items-center justify-center cursor-pointer shrink-0 pt-1"
+                >
+                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                    isChecked
+                      ? "bg-emerald-500 border-emerald-500 text-white"
+                      : "border-slate-300 bg-white hover:border-slate-400"
+                  }`}>
+                    {isChecked && (
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    )}
+                  </div>
+                </div>
+
                 <img
                   src={emp.avatar}
                   alt={emp.name}
-                  className="w-14 h-14 rounded-xl object-cover border border-slate-100 shrink-0"
+                  className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 justify-between">
@@ -187,7 +576,13 @@ export default function Directory({
                     </span>
                   </div>
                   <h4 className="text-sm font-bold text-slate-800 truncate mt-1">{emp.name}</h4>
-                  <p className="text-[11px] text-slate-400 font-medium truncate leading-normal">{emp.role}</p>
+                  <div className="flex items-center gap-1.5 justify-between flex-wrap">
+                    <p className="text-[11px] text-slate-400 font-medium truncate leading-normal flex-1">{emp.role}</p>
+                    <span className="inline-flex items-center gap-0.5 text-[9px] text-slate-400 font-mono font-medium">
+                      <MapPin className="w-2.5 h-2.5 text-emerald-500" />
+                      {getEmployeeLocation(emp)}
+                    </span>
+                  </div>
                   
                   <div className="mt-3 flex flex-wrap gap-1">
                     {emp.skills.slice(0, 3).map(skill => (
@@ -330,6 +725,22 @@ export default function Directory({
                   <div>
                     <span className="text-slate-400 block text-[10px]">Performance Band</span>
                     <span className="font-bold text-emerald-600">{selectedEmp.performanceRating}/5.0</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] flex items-center gap-0.5">
+                      <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                      Office Location
+                    </span>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editLocation}
+                        onChange={(e) => setEditLocation(e.target.value)}
+                        className="bg-white border border-slate-200 rounded-md py-1 px-1.5 w-full font-sans"
+                      />
+                    ) : (
+                      <span className="font-semibold text-slate-800">{getEmployeeLocation(selectedEmp)}</span>
+                    )}
                   </div>
                 </div>
               </div>

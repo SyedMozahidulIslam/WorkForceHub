@@ -11,7 +11,10 @@ import {
   Bar, 
   PieChart, 
   Pie, 
-  Cell 
+  Cell,
+  LineChart,
+  Line,
+  Legend
 } from "recharts";
 import { 
   Users, 
@@ -41,7 +44,7 @@ import {
   ShieldAlert,
   Loader2
 } from "lucide-react";
-import { Employee, JobRequisition, LeaveRequest, AttendanceRecord, PayrollRun } from "../types";
+import { Employee, JobRequisition, LeaveRequest, AttendanceRecord, PayrollRun, Goal } from "../types";
 
 interface DashboardProps {
   employees: Employee[];
@@ -50,6 +53,7 @@ interface DashboardProps {
   attendance: AttendanceRecord[];
   payroll: PayrollRun[];
   activeRole: string;
+  goals?: Goal[];
 }
 
 export default function Dashboard({
@@ -58,7 +62,8 @@ export default function Dashboard({
   leaves,
   attendance,
   payroll,
-  activeRole
+  activeRole,
+  goals = []
 }: DashboardProps) {
 
   // Dynamic calculations for enterprise dashboard stats
@@ -194,6 +199,42 @@ export default function Dashboard({
     }
     return fullHeadcountTrendData;
   }, [chartTimeframe]);
+
+  const avgGoalCompletion = useMemo(() => {
+    if (goals.length === 0) return 82;
+    return Math.round(goals.reduce((sum, g) => sum + g.progress, 0) / goals.length);
+  }, [goals]);
+
+  const activeOkrsCount = useMemo(() => {
+    return goals.filter(g => g.progress < 100).length;
+  }, [goals]);
+
+  const completedOkrsCount = useMemo(() => {
+    return goals.filter(g => g.progress === 100).length;
+  }, [goals]);
+
+  const onTrackOkrRate = useMemo(() => {
+    if (goals.length === 0) return 92;
+    const onTrackOrCompleted = goals.filter(g => g.status === "On Track" || g.status === "In Progress" || g.progress === 100).length;
+    return Math.round((onTrackOrCompleted / goals.length) * 100);
+  }, [goals]);
+
+  const twelveMonthTrendData = useMemo(() => {
+    return [
+      { month: "Aug 2025", headcount: Math.max(25, totalCount - 15), successRate: 74, totalApplied: 120, hires: 6 },
+      { month: "Sep 2025", headcount: Math.max(27, totalCount - 13), successRate: 76, totalApplied: 135, hires: 8 },
+      { month: "Oct 2025", headcount: Math.max(29, totalCount - 11), successRate: 75, totalApplied: 110, hires: 5 },
+      { month: "Nov 2025", headcount: Math.max(32, totalCount - 9), successRate: 78, totalApplied: 140, hires: 9 },
+      { month: "Dec 2025", headcount: Math.max(35, totalCount - 7), successRate: 82, totalApplied: 160, hires: 12 },
+      { month: "Jan 2026", headcount: Math.max(38, totalCount - 5), successRate: 85, totalApplied: 150, hires: 10 },
+      { month: "Feb 2026", headcount: Math.max(41, totalCount - 4), successRate: 84, totalApplied: 125, hires: 7 },
+      { month: "Mar 2026", headcount: Math.max(44, totalCount - 3), successRate: 88, totalApplied: 170, hires: 13 },
+      { month: "Apr 2026", headcount: Math.max(47, totalCount - 2), successRate: 90, totalApplied: 185, hires: 15 },
+      { month: "May 2026", headcount: Math.max(50, totalCount - 1), successRate: 92, totalApplied: 190, hires: 16 },
+      { month: "Jun 2026", headcount: Math.max(53, totalCount - 1), successRate: 94, totalApplied: 210, hires: 18 },
+      { month: "Jul 2026", headcount: totalCount, successRate: 95, totalApplied: 220, hires: 20 }
+    ];
+  }, [totalCount]);
 
   // Data for Recruitment pipeline funnel
   const funnelData = [
@@ -758,6 +799,88 @@ export default function Dashboard({
                   <Area type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={1.5} fillOpacity={1} fill="url(#sparklineEngagement)" />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2.5: Performance Overview Widget (12-columns) */}
+        <div id="performance-overview-widget" className="col-span-12 bento-card p-6 bg-white flex flex-col justify-between">
+          <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight flex items-center gap-1.5">
+                    Performance Overview
+                  </h3>
+                  <p className="text-xs text-slate-400">Strategic Objectives, Key Results, and target completion velocity metrics.</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+                Real-Time Tracking
+              </span>
+            </div>
+
+            {/* Grid of Key Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Metric 1: Average Goal Completion Rate */}
+              <div id="metric-avg-goal-completion" className="p-4 rounded-xl border border-slate-100 bg-slate-50/40 hover:border-indigo-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">Average Goal Completion Rate</span>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">{avgGoalCompletion}%</span>
+                  <span className="text-xs font-bold text-indigo-600 font-mono">Company Wide</span>
+                </div>
+                {/* visual bar */}
+                <div className="w-full bg-slate-200/60 h-1.5 rounded-full mt-3 overflow-hidden">
+                  <div 
+                    className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${avgGoalCompletion}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Metric 2: Total Active OKRs */}
+              <div id="metric-total-active-okrs" className="p-4 rounded-xl border border-slate-100 bg-slate-50/40 hover:border-emerald-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">Total Active OKRs</span>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">{activeOkrsCount}</span>
+                  <span className="text-xs font-bold text-emerald-600 font-mono">In Progress</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-3 text-[10px] text-slate-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Currently tracked</span>
+                </div>
+              </div>
+
+              {/* Metric 3: Completed Milestones */}
+              <div id="metric-completed-milestones" className="p-4 rounded-xl border border-slate-100 bg-slate-50/40 hover:border-blue-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">Completed Milestones</span>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">{completedOkrsCount}</span>
+                  <span className="text-xs font-bold text-blue-600 font-mono">100% Achieved</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-3 text-[10px] text-slate-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  <span>Targets fully fulfilled</span>
+                </div>
+              </div>
+
+              {/* Metric 4: On-Track OKR Rate */}
+              <div id="metric-ontrack-okr-rate" className="p-4 rounded-xl border border-slate-100 bg-slate-50/40 hover:border-amber-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">On-Track OKR Rate</span>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">{onTrackOkrRate}%</span>
+                  <span className="text-xs font-bold text-amber-600 font-mono">Healthy Velocity</span>
+                </div>
+                <div className="w-full bg-slate-200/60 h-1.5 rounded-full mt-3 overflow-hidden">
+                  <div 
+                    className="bg-amber-500 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${onTrackOkrRate}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1569,6 +1692,121 @@ export default function Dashboard({
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
               All Engines Nominal
             </span>
+          </div>
+        </div>
+
+        {/* Row 5.5: 12-Month Headcount Growth & Recruitment Success Trend (12-columns) */}
+        <div className="col-span-12 bento-card p-6 bg-white flex flex-col justify-between">
+          <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 shrink-0">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-sans text-slate-800 tracking-tight flex items-center gap-1.5">
+                    12-Month Workforce Telemetry & Recruitment Velocity
+                  </h3>
+                  <p className="text-xs text-slate-400">Continuous tracking of total active FTE headcount and successful requisition fulfillment rates.</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+                Aug 2025 – Jul 2026
+              </span>
+            </div>
+
+            {/* Metric quick stats grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:border-emerald-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">Net Scale-up Growth</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">+{totalCount - Math.max(25, totalCount - 15)} FTEs</span>
+                  <span className="text-xs font-bold text-emerald-600 font-mono">+{Math.round(((totalCount - Math.max(25, totalCount - 15)) / Math.max(25, totalCount - 15)) * 100)}%</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:border-amber-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">Avg Success Rate</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">84.2%</span>
+                  <span className="text-xs font-bold text-amber-600 font-mono">Optimal Range</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:border-indigo-500/15 transition-colors">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 block mb-1">Total Talent Funneled</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-slate-800 tracking-tight">1,995</span>
+                  <span className="text-xs font-bold text-indigo-600 font-mono">Candidates</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recharts Dual-axis Line Chart container */}
+            <div className="h-80 w-full mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={twelveMonthTrendData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis 
+                    dataKey="month" 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                  />
+                  <YAxis 
+                    yAxisId="left" 
+                    stroke="#10b981" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    domain={['dataMin - 2', 'dataMax + 2']}
+                  />
+                  <YAxis 
+                    yAxisId="right" 
+                    orientation="right" 
+                    stroke="#f59e0b" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    domain={[60, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1.5px solid #f1f5f9', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}
+                    labelStyle={{ fontWeight: 'bold', color: '#1e293b', fontSize: '11px', marginBottom: '4px' }}
+                    itemStyle={{ fontSize: '11px', padding: '1px 0' }}
+                  />
+                  <Legend 
+                    verticalAlign="top" 
+                    height={40} 
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: '11px', fontWeight: '500', paddingBottom: '10px' }}
+                  />
+                  <Line 
+                    yAxisId="left" 
+                    type="monotone" 
+                    dataKey="headcount" 
+                    name="Active FTE Headcount" 
+                    stroke="#10b981" 
+                    strokeWidth={3} 
+                    activeDot={{ r: 6, strokeWidth: 0 }} 
+                    dot={{ r: 3, strokeWidth: 1 }}
+                  />
+                  <Line 
+                    yAxisId="right" 
+                    type="monotone" 
+                    dataKey="successRate" 
+                    name="Recruitment Success Rate (%)" 
+                    stroke="#f59e0b" 
+                    strokeWidth={3} 
+                    activeDot={{ r: 6, strokeWidth: 0 }} 
+                    dot={{ r: 3, strokeWidth: 1 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 

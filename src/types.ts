@@ -27,6 +27,7 @@ export interface Employee {
   emergencyContactPhone: string;
   medicalBenefits: string;
   performanceRating: number; // 1 to 5
+  location?: string;
   leaveBalance: {
     casual: number;
     sick: number;
@@ -123,6 +124,7 @@ export interface PerformanceGoal {
   keyResult?: string;
   category?: string;
   progress: number; // 0 to 100
+  startDate?: string;
   targetDate: string;
   status: string;
 }
